@@ -1,6 +1,7 @@
 import assert from "assert";
 import { HubPoolClient } from "../clients/HubPoolClient";
 import { Deposit, Fill, FillWithBlock, UbaFlow, isUbaInflow, outflowIsFill } from "../interfaces";
+import { isDefined } from "../utils";
 
 export const FILL_DEPOSIT_COMPARISON_KEYS = [
   "amount",
@@ -55,18 +56,23 @@ export function filledSameDeposit(fillA: Fill, fillB: Fill): boolean {
 
 // Ensure that each deposit element is included with the same value in the fill. This includes all elements defined
 // by the depositor as well as the realizedLpFeePct and the destinationToken, which are pulled from other clients.
-export function validateFillForDeposit(fill: Fill, deposit?: Deposit, fillFieldsToIgnore: string[] = []): boolean {
+export function validateFillForDeposit(
+  fill: Fill,
+  deposit?: Deposit,
+  fillFieldsToIgnore: string[] = []
+): { valid: true } | { valid: false; reason: string } {
   if (deposit === undefined) {
-    return false;
+    return { valid: false, reason: "Deposit is undefined" };
   }
 
   // Note: this short circuits when a key is found where the comparison doesn't match.
   // TODO: if we turn on "strict" in the tsconfig, the elements of FILL_DEPOSIT_COMPARISON_KEYS will be automatically
   // validated against the fields in Fill and Deposit, generating an error if there is a discrepency.
-  return FILL_DEPOSIT_COMPARISON_KEYS.every((key) => {
-    if (fillFieldsToIgnore.includes(key)) {
-      return true;
-    }
-    return fill[key] !== undefined && fill[key].toString() === deposit[key]?.toString();
-  });
+  const invalidKey = FILL_DEPOSIT_COMPARISON_KEYS.find((key) =>
+    fill[key]?.toString() !== deposit[key]?.toString() && !fillFieldsToIgnore.includes(key)
+  );
+
+  return isDefined(invalidKey)
+  ? { valid: false, reason: `${invalidKey} mismatch (${fill[invalidKey]} != ${deposit[invalidKey]})` }
+  : { valid: true };
 }
